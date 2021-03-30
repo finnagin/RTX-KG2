@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 
-''' Parses KG2 TSV files to the mediKanren CSV format
-    Usage: tsv-to-medikanren-csv.py  <inputDir> <outputDir>
+''' Parses KG2 TSV files to the mediKanren TSV format
+    Usage: tsv-to-medikanren-tsv.py  <inputDir> <outputDir>
 '''
 
 import csv
 import sys
 import argparse
 import re
+import json
 
 __author__ = 'Erica Wood'
 __copyright__ = 'Oregon State University'
-__credits__ = ['Stephen Ramsey', 'Erica Wood']
+__credits__ = ['Stephen Ramsey', 'Erica Wood', 'Lindsey Kvarfordt']
 __license__ = 'MIT'
 __version__ = '0.1.0'
 __maintainer__ = ''
@@ -27,8 +28,8 @@ def output_file_names(directory: str):
 
     filebase = directory + "rtx_kg2."
 
-    return {"nodes": [filebase + "node.csv", filebase + "nodeprop.csv"],
-            "edges": [filebase + "edge.csv", filebase + "edgeprop.csv"]}
+    return {"nodes": [filebase + "node.tsv", filebase + "nodeprop.tsv"],
+            "edges": [filebase + "edge.tsv", filebase + "edgeprop.tsv"]}
 
 
 def input_file_names(directory: str):
@@ -38,7 +39,7 @@ def input_file_names(directory: str):
             "edges": [directory + "edges.tsv", directory + "edges_header.tsv"]}
 
 
-def make_csv_list(stringifiedlist: str):
+def make_tsv_list(stringifiedlist: str):
     prop_value_list = stringifiedlist.split(";")
     prop_value_string = '('
     for prop_string in prop_value_list:
@@ -55,11 +56,11 @@ def make_csv_list(stringifiedlist: str):
 
 def nodes(nodes_input, nodes_output):
     nodes_o = open(nodes_output[0], 'w+')
-    output_nodes = csv.writer(nodes_o, delimiter=",")
+    output_nodes = csv.writer(nodes_o, delimiter="\t")
     output_nodes.writerow([":ID"])
 
     nodes_prop_o = open(nodes_output[1], 'w+')
-    nodes_prop_o.write(":ID,propname,value\n")
+    nodes_prop_o.write(":ID\tpropname\tvalue\n")
 
     header = []
     with open(nodes_input[1]) as nodes_header:
@@ -71,9 +72,10 @@ def nodes(nodes_input, nodes_output):
     with open(nodes_input[0]) as nodes:
         for line in csv.reader(nodes, delimiter="\t"):
             id = line[id_index]
-            if ',' in id:
-                id = '"' + id + '"'
             output_nodes.writerow([id])
+
+            if "\t" in id:
+                id = '"' + id + '"'
 
             index = 0
 
@@ -82,12 +84,14 @@ def nodes(nodes_input, nodes_output):
                 prop = propfull.split(":")[0]
 
                 if ":string[]" in propfull:
-                    propvalue = make_csv_list(propvalue)
+                    propvalue = make_tsv_list(propvalue)
 
                 if len(prop) > 0 and len(propvalue) > 0:
-                    if "," in propvalue or '"' in propvalue or '\n' in propvalue:
-                        propvalue = '"' + re.sub(r'\n+', '\n', propvalue.replace('"', "'")).strip() + '"'
-                    proplist = id + "," + prop + "," + propvalue + "\n"
+                    propvalue = propvalue.replace("\n", " ")
+                    if "\t" in propvalue or '"' in propvalue:
+                        # stringifies and handles the escaping of extra quotes
+                        propvalue = json.dumps(propvalue)
+                   proplist = id + "\t" + prop + "\t" + propvalue + "\n"
                     nodes_prop_o.write(proplist)
                 index += 1
 
@@ -97,11 +101,11 @@ def nodes(nodes_input, nodes_output):
 
 def edges(edges_input, edges_output):
     edges_o = open(edges_output[0], 'w+')
-    output_edges = csv.writer(edges_o, delimiter=",")
+    output_edges = csv.writer(edges_o, delimiter="\t")
     output_edges.writerow([":ID", ":START", ":END"])
 
     edges_prop_o = open(edges_output[1], 'w+')
-    edges_prop_o.write(":ID,propname,value\n")
+    edges_prop_o.write(":ID\tpropname\tvalue\n")
 
     header = []
     with open(edges_input[1]) as edges_header:
@@ -115,10 +119,6 @@ def edges(edges_input, edges_output):
         for line in csv.reader(edges, delimiter="\t"):
             source_id = line[start_index]
             target_id = line[end_index]
-            if "," in source_id:
-                target_id = '"' + source_id + '"'
-            if "," in source_id:
-                target_id = '"' + target_id + '"'
             output_edges.writerow([line_id,
                                    source_id,
                                    target_id])
@@ -129,13 +129,15 @@ def edges(edges_input, edges_output):
                 propfull = header[index]
                 prop = propfull.split(":")[0]
                 if ":string[]" in propfull:
-                    propvalue = make_csv_list(propvalue)
+                    propvalue = make_tsv_list(propvalue)
 
                 if len(prop) > 0 and len(propvalue) > 0:
-                    if "," in propvalue or '"' in propvalue or '\n' in propvalue:
-                        propvalue = '"' + re.sub(r'\n+', '\n', propvalue.replace('"', "'")).strip() + '"'
-                    proplist = str(line_id) + "," + prop + "," + propvalue + "\n"
-                    edges_prop_o.write(proplist)
+                    propvalue = propvalue.replace("\n", " ")
+                    if "\t" in propvalue or '"' in propvalue:
+                        # stringifies and handles the escaping of extra quotes
+                        propvalue = json.dumps(propvalue)
+                    proplist = str(line_id) + "\t" + prop + "\t" + propvalue + "\n"
+                   edges_prop_o.write(proplist)
                 index += 1
 
             line_id += 1
